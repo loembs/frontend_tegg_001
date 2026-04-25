@@ -1,0 +1,44 @@
+services:
+
+  db:
+    image: postgres:15
+    container_name: tegg_db1
+    restart: always
+    environment:
+      POSTGRES_USER: tegg_user
+      POSTGRES_PASSWORD: TeggSecure2024!
+      POSTGRES_DB: tegg_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backend/database/schema.sql:/docker-entrypoint-initdb.d/schema.sql
+
+  backend:
+    build: ./backend
+    container_name: tegg_api1
+    ports:
+      - "3001:3001"
+    environment:
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_NAME: tegg_db
+      DB_USER: tegg_user
+      DB_PASSWORD: TeggSecure2024!
+      JWT_SECRET: super_secret
+    depends_on:
+      - db
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+
+  frontend:
+    build: .
+    container_name: tegg_frontend1
+    ports:
+      - "5173:80"
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:
