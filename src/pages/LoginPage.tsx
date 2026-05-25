@@ -33,7 +33,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onBack, initialRo
     setLoading(true);
     setError('');
     try {
-      const success = login(phone, password, selectedRole);
+      const success = await login(phone, password, selectedRole);
       if (success) {
         onLogin();
       } else {
@@ -67,16 +67,23 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onBack, initialRo
     setError('');
     
     try {
-      register({
+      const registerSuccess = await register({
         phone,
         firstName,
         lastName,
+        password,
         email: `${phone.replace(/\s/g, '')}@tegg.sn`,
         ...(selectedRole === 'artisan' && { category }),
       }, selectedRole);
       
-      login(phone, password, selectedRole);
-      onLogin();
+      if (registerSuccess) {
+        const loginSuccess = await login(phone, password, selectedRole);
+        if (loginSuccess) {
+          onLogin();
+        } else {
+          setError('Erreur de connexion');
+        }
+      }
     } catch {
       setError('Une erreur est survenue');
     }

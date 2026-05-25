@@ -31,6 +31,7 @@ async function apiRequest<T>(
   options: RequestInit = {}
 ): Promise<T> {
   const url = `${API_URL}${endpoint}`;
+  const method = options.method || 'GET';
   
   const config: RequestInit = {
     ...options,
@@ -39,20 +40,38 @@ async function apiRequest<T>(
       ...options.headers,
     },
   };
+
+  // Log de la requête
+  console.log(`📤 [${method}] ${url}`, {
+    headers: config.headers,
+    body: options.body ? JSON.parse(options.body as string) : undefined,
+  });
   
   try {
     const response = await fetch(url, config);
-    
     const data = await response.json();
+
+    // Log de la réponse
+    if (response.ok) {
+      console.log(`✅ [${method}] ${endpoint} - Status: ${response.status}`, data);
+    } else {
+      console.warn(`⚠️ [${method}] ${endpoint} - Status: ${response.status}`, data);
+    }
     
     if (!response.ok) {
-      throw new Error(data.error || 'Une erreur est survenue');
+      const errorMessage = data.error || 'Une erreur est survenue';
+      console.error(`❌ Erreur API: ${errorMessage}`, data);
+      throw new Error(errorMessage);
     }
     
     return data;
   } catch (error) {
     if (error instanceof TypeError) {
+      console.error(`❌ Erreur de connexion au serveur: ${error.message}`);
       throw new Error('Erreur de connexion au serveur');
+    }
+    if (error instanceof Error) {
+      console.error(`❌ Erreur: ${error.message}`);
     }
     throw error;
   }

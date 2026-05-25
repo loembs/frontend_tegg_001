@@ -1,6 +1,7 @@
-import React, { createContext, useContext, useState, ReactNode } from 'react';
+import React, { createContext, useContext, useState, ReactNode, useEffect, useMemo } from 'react';
 import { User, Artisan, Client, ServiceRequest, Notification, UserRole } from '../types';
 import { mockArtisans, mockClients, mockRequests, mockNotifications } from '../data/mockData';
+import api, { setAuthToken, getAuthToken } from '../services/api';
 
 interface AppState {
   currentUser: User | Artisan | Client | null;
@@ -13,23 +14,25 @@ interface AppState {
 }
 
 interface AppContextType extends AppState {
-  login: (email: string, password: string, role: UserRole) => boolean;
+  login: (phone: string, password: string, role: UserRole) => Promise<boolean>;
   logout: () => void;
-  register: (userData: Partial<User | Artisan | Client>, role: UserRole) => boolean;
-  updateArtisan: (id: string, data: Partial<Artisan>) => void;
-  updateClient: (id: string, data: Partial<Client>) => void;
-  createRequest: (request: Omit<ServiceRequest, 'id' | 'createdAt' | 'status'>) => void;
+  register: (userData: Partial<User | Artisan | Client>, role: UserRole) => Promise<boolean>;
+  updateArtisan: (id: string, data: Partial<Artisan>) => Promise<void>;
+  updateClient: (id: string, data: Partial<Client>) => Promise<void>;
+  createRequest: (request: Omit<ServiceRequest, 'id' | 'createdAt' | 'status'>) => Promise<void>;
   updateRequest: (id: string, data: Partial<ServiceRequest>) => void;
-  acceptRequest: (requestId: string, artisanId: string) => void;
-  completeRequest: (requestId: string, amount: number, isArtisan: boolean) => void;
-  cancelRequest: (requestId: string) => void;
-  rateArtisan: (requestId: string, rating: number, review: string) => void;
+  acceptRequest: (requestId: string, artisanId: string) => Promise<void>;
+  completeRequest: (requestId: string, amount: number, isArtisan: boolean) => Promise<void>;
+  cancelRequest: (requestId: string) => Promise<void>;
+  rateArtisan: (requestId: string, rating: number, review: string) => Promise<void>;
   addNotification: (notification: Omit<Notification, 'id' | 'createdAt'>) => void;
   markNotificationRead: (id: string) => void;
-  requestWithdrawal: (artisanId: string, amount: number) => void;
-  depositBalance: (artisanId: string, amount: number) => void;
-  validateArtisan: (artisanId: string, validated: boolean) => void;
-  blockArtisan: (artisanId: string, blocked: boolean) => void;
+  requestWithdrawal: (artisanId: string, amount: number) => Promise<void>;
+  depositBalance: (artisanId: string, amount: number) => Promise<void>;
+  validateArtisan: (artisanId: string, validated: boolean) => Promise<void>;
+  blockArtisan: (artisanId: string, blocked: boolean) => Promise<void>;
+  loading: boolean;
+  error: string | null;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -45,89 +48,55 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     isAuthenticated: false,
   });
 
-  const login = (phone: string, _password: string, role: UserRole): boolean => {
-    // Admin login with phone
-    if (role === 'admin' && (phone === '+221 33 800 00 00' || phone === 'admin@tegg.sn')) {
-      setState(prev => ({
-        ...prev,
-        currentUser: {
-          id: 'admin',
-          email: 'admin@tegg.sn',
-          firstName: 'Admin',
-          lastName: 'Tëgg',
-          phone: '+221 33 800 00 00',
-          role: 'admin',
-          isActive: true,
-          createdAt: new Date(),
-        },
-        userRole: 'admin',
-        isAuthenticated: true,
-      }));
-      return true;
-    }
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-    if (role === 'artisan') {
-      const artisan = state.artisans.find(a => a.phone === phone || a.email === phone);
-      if (artisan) {
+  // Check if user is already authenticated on mount
+  useEffect(() => {
+    const token = getAuthToken();
+    if (token) {
+      // Load current user data
+      api.auth.me().then(user => {
         setState(prev => ({
           ...prev,
-          currentUser: artisan,
-          userRole: 'artisan',
+          currentUser: user,
+          isAuthenticated: true,
+          userRole: user.role as UserRole,
+        }));
+      }).catch(() => {
+        setAuthToken(null);
+      });
+    }
+  }, []);
+
+  const login = async (phone: string, password: string, role: UserRole): Promise<boolean> => {
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await api.auth.login(phone, password);
+      
+      if (response.success && response.token) {
+        setAuthToken(response.token);
+        setState(prev => ({
+          ...prev,
+          currentUser: response.user,
+          userRole: role,
           isAuthenticated: true,
         }));
         return true;
       }
+      return false;
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Erreur de connexion';
+      setError(errorMessage);
+      return false;
+    } finally {
+      setLoading(false);
     }
-
-    if (role === 'client') {
-      const client = state.clients.find(c => c.phone === phone || c.email === phone);
-      if (client) {
-        setState(prev => ({
-          ...prev,
-          currentUser: client,
-          userRole: 'client',
-          isAuthenticated: true,
-        }));
-        return true;
-      }
-    }
-
-    // Demo mode - create temp user with phone
-    const demoUser: User = {
-      id: `demo_${Date.now()}`,
-      email: `${phone.replace(/\s/g, '').replace('+', '')}@tegg.sn`,
-      firstName: role === 'artisan' ? 'Artisan' : 'Client',
-      lastName: 'Demo',
-      phone: phone,
-      role,
-      isActive: true,
-      createdAt: new Date(),
-    };
-
-    setState(prev => ({
-      ...prev,
-      currentUser: role === 'artisan' ? {
-        ...demoUser,
-        category: 'electricite',
-        subCategories: ['Prises', 'Éclairage'],
-        rating: 4.5,
-        totalMissions: 0,
-        balance: 5000,
-        balanceThreshold: 5000,
-        isOnline: true,
-        isValidated: true,
-        withdrawalRequests: [],
-      } as Artisan : {
-        ...demoUser,
-        type: 'particulier',
-      } as Client,
-      userRole: role,
-      isAuthenticated: true,
-    }));
-    return true;
   };
 
   const logout = () => {
+    setAuthToken(null);
     setState(prev => ({
       ...prev,
       currentUser: null,
@@ -136,86 +105,102 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }));
   };
 
-  const register = (userData: Partial<User | Artisan | Client>, role: UserRole): boolean => {
-    const newUser = {
-      ...userData,
-      id: `${role}_${Date.now()}`,
-      role,
-      isActive: true,
-      createdAt: new Date(),
-    };
-
-    if (role === 'artisan') {
-      const newArtisan: Artisan = {
-        ...newUser,
-        category: (userData as Partial<Artisan>).category || 'electricite',
-        subCategories: [],
-        rating: 5,
-        totalMissions: 0,
-        balance: 0,
-        balanceThreshold: 5000,
-        isOnline: false,
-        isValidated: false,
-        withdrawalRequests: [],
-      } as Artisan;
-      setState(prev => ({
-        ...prev,
-        artisans: [...prev.artisans, newArtisan],
-      }));
-    } else if (role === 'client') {
-      const newClient: Client = {
-        ...newUser,
-        type: (userData as Partial<Client>).type || 'particulier',
-      } as Client;
-      setState(prev => ({
-        ...prev,
-        clients: [...prev.clients, newClient],
-      }));
+  const register = async (userData: Partial<User | Artisan | Client>, role: UserRole): Promise<boolean> => {
+    setLoading(true);
+    setError(null);
+    try {
+      const data = {
+        phone: (userData as any).phone || '',
+        password: (userData as any).password || '',
+        firstName: userData.firstName || '',
+        lastName: userData.lastName || '',
+        userType: role,
+        categoryId: (userData as Partial<Artisan>).category,
+        ...userData,
+      };
+      
+      const response = await api.auth.register(data);
+      
+      if (response.success && response.token) {
+        setAuthToken(response.token);
+        setState(prev => ({
+          ...prev,
+          currentUser: response.user,
+          userRole: role,
+          isAuthenticated: true,
+        }));
+        return true;
+      }
+      return false;
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Erreur d\'enregistrement';
+      setError(errorMessage);
+      return false;
+    } finally {
+      setLoading(false);
     }
-
-    return true;
   };
 
-  const updateArtisan = (id: string, data: Partial<Artisan>) => {
-    setState(prev => ({
-      ...prev,
-      artisans: prev.artisans.map(a => a.id === id ? { ...a, ...data } : a),
-      currentUser: prev.currentUser?.id === id ? { ...prev.currentUser, ...data } : prev.currentUser,
-    }));
+  const updateArtisan = async (id: string, data: Partial<Artisan>) => {
+    try {
+      await api.artisan.updateProfile(data);
+      setState(prev => ({
+        ...prev,
+        artisans: prev.artisans.map(a => a.id === id ? { ...a, ...data } : a),
+        currentUser: prev.currentUser?.id === id ? { ...prev.currentUser, ...data } : prev.currentUser,
+      }));
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Erreur de mise à jour';
+      setError(errorMessage);
+    }
   };
 
-  const updateClient = (id: string, data: Partial<Client>) => {
-    setState(prev => ({
-      ...prev,
-      clients: prev.clients.map(c => c.id === id ? { ...c, ...data } : c),
-      currentUser: prev.currentUser?.id === id ? { ...prev.currentUser, ...data } : prev.currentUser,
-    }));
+  const updateClient = async (id: string, data: Partial<Client>) => {
+    try {
+      await api.client.updateProfile(data);
+      setState(prev => ({
+        ...prev,
+        clients: prev.clients.map(c => c.id === id ? { ...c, ...data } : c),
+        currentUser: prev.currentUser?.id === id ? { ...prev.currentUser, ...data } : prev.currentUser,
+      }));
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Erreur de mise à jour';
+      setError(errorMessage);
+    }
   };
 
-  const createRequest = (request: Omit<ServiceRequest, 'id' | 'createdAt' | 'status'>) => {
-    const newRequest: ServiceRequest = {
-      ...request,
-      id: `req_${Date.now()}`,
-      status: 'en_attente',
-      createdAt: new Date(),
-    };
-    setState(prev => ({
-      ...prev,
-      requests: [newRequest, ...prev.requests],
-    }));
-
-    // Notify artisans of the category
-    state.artisans
-      .filter(a => a.category === request.category && a.isOnline && a.isValidated)
-      .forEach(artisan => {
-        addNotification({
-          userId: artisan.id,
-          title: 'Nouvelle demande',
-          message: `Nouvelle demande de ${request.serviceType} - ${request.subCategory} à ${request.quartier}`,
-          type: 'info',
-          read: false,
-        });
+  const createRequest = async (request: Omit<ServiceRequest, 'id' | 'createdAt' | 'status'>) => {
+    try {
+      const response = await api.requests.create({
+        categoryId: request.category,
+        subcategoryId: request.subCategory,
+        serviceType: request.serviceType,
+        title: request.description,
+        description: request.description,
+        quantity: request.elementCount,
+        isUrgent: request.isUrgent,
+        address: request.address,
+        neighborhood: request.quartier,
+        latitude: request.latitude,
+        longitude: request.longitude,
       });
+
+      const newRequest: ServiceRequest = {
+        ...request,
+        id: response.request.id,
+        status: 'en_attente',
+        createdAt: new Date(),
+      };
+
+      setState(prev => ({
+        ...prev,
+        requests: [newRequest, ...prev.requests],
+      }));
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Erreur de création de demande';
+      setError(errorMessage);
+      throw err;
+    }
   };
 
   const updateRequest = (id: string, data: Partial<ServiceRequest>) => {
@@ -225,126 +210,78 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }));
   };
 
-  const acceptRequest = (requestId: string, artisanId: string) => {
-    const artisan = state.artisans.find(a => a.id === artisanId);
-    if (!artisan || artisan.balance < 500) return;
+  const acceptRequest = async (requestId: string, artisanId: string) => {
+    try {
+      const response = await api.missions.accept(requestId);
+      
+      const artisan = state.artisans.find(a => a.id === artisanId);
+      if (artisan) {
+        // Deduct provision
+        setState(prev => ({
+          ...prev,
+          artisans: prev.artisans.map(a => 
+            a.id === artisanId ? { ...a, balance: response.newBalance } : a
+          ),
+        }));
+      }
 
-    // Deduct provision (500 FCFA)
-    updateArtisan(artisanId, { balance: artisan.balance - 500 });
-
-    const request = state.requests.find(r => r.id === requestId);
-    setState(prev => ({
-      ...prev,
-      requests: prev.requests.map(r => r.id === requestId ? {
-        ...r,
-        status: 'en_cours',
-        artisanId,
-        artisanName: `${artisan.firstName} ${artisan.lastName}`,
-        artisanPhone: artisan.phone,
-        acceptedAt: new Date(),
-      } : r),
-    }));
-
-    // Notify client
-    if (request) {
-      addNotification({
-        userId: request.clientId,
-        title: 'Demande acceptée',
-        message: `${artisan.firstName} ${artisan.lastName} a accepté votre demande`,
-        type: 'success',
-        read: false,
-      });
+      const request = state.requests.find(r => r.id === requestId);
+      if (request) {
+        setState(prev => ({
+          ...prev,
+          requests: prev.requests.map(r => r.id === requestId ? {
+            ...r,
+            status: 'en_cours',
+            artisanId,
+            acceptedAt: new Date(),
+          } : r),
+        }));
+      }
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Erreur d\'acceptation';
+      setError(errorMessage);
+      throw err;
     }
   };
 
-  const completeRequest = (requestId: string, amount: number, isArtisan: boolean) => {
-    const request = state.requests.find(r => r.id === requestId);
-    if (!request) return;
-
-    if (isArtisan) {
-      updateRequest(requestId, {
-        artisanAmount: amount,
-        artisanValidated: true,
-      });
-      
-      // Notify client
-      addNotification({
-        userId: request.clientId,
-        title: 'Mission terminée',
-        message: 'Veuillez confirmer et saisir le montant payé pour recevoir la garantie',
-        type: 'info',
-        read: false,
-      });
-    } else {
-      updateRequest(requestId, {
-        clientAmount: amount,
-        clientValidated: true,
-      });
-    }
-
-    // Check if both validated
-    const updatedRequest = {
-      ...request,
-      ...(isArtisan ? { artisanAmount: amount, artisanValidated: true } : { clientAmount: amount, clientValidated: true }),
-    };
-
-    if (updatedRequest.artisanValidated && updatedRequest.clientValidated) {
-      // Calculate commission - 1% of final amount, minimum 500 FCFA
-      const finalAmount = updatedRequest.artisanAmount || updatedRequest.clientAmount || 0;
-      let commission = Math.max(finalAmount * 0.01, 500);
-      
-      // Already took 500 FCFA provision
-      const remainingCommission = commission - 500;
-      
-      if (request.artisanId) {
-        const artisan = state.artisans.find(a => a.id === request.artisanId);
-        if (artisan && remainingCommission > 0) {
-          updateArtisan(request.artisanId, { 
-            balance: artisan.balance - remainingCommission,
-            totalMissions: artisan.totalMissions + 1,
-          });
-        }
+  const completeRequest = async (requestId: string, amount: number, isArtisan: boolean) => {
+    try {
+      if (isArtisan) {
+        await api.missions.complete(requestId, amount);
+      } else {
+        await api.requests.confirm(requestId, amount);
       }
 
       updateRequest(requestId, {
         status: 'terminee',
         completedAt: new Date(),
-        commission,
       });
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Erreur de complétion';
+      setError(errorMessage);
+      throw err;
     }
   };
 
-  const cancelRequest = (requestId: string) => {
-    updateRequest(requestId, { status: 'annulee' });
+  const cancelRequest = async (requestId: string) => {
+    try {
+      await api.requests.cancel(requestId);
+      updateRequest(requestId, { status: 'annulee' });
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Erreur d\'annulation';
+      setError(errorMessage);
+      throw err;
+    }
   };
 
-  const rateArtisan = (requestId: string, rating: number, review: string) => {
-    const request = state.requests.find(r => r.id === requestId);
-    if (!request || !request.artisanId) return;
-
-    updateRequest(requestId, { rating, review });
-
-    // Update artisan rating
-    const artisan = state.artisans.find(a => a.id === request.artisanId);
-    if (artisan) {
-      const completedRequests = state.requests.filter(
-        r => r.artisanId === artisan.id && r.status === 'terminee' && r.rating
-      );
-      const totalRatings = completedRequests.reduce((sum, r) => sum + (r.rating || 0), 0) + rating;
-      const newRating = totalRatings / (completedRequests.length + 1);
-      
-      updateArtisan(artisan.id, { rating: Math.round(newRating * 10) / 10 });
-
-      // Alert if rating < 3
-      if (newRating < 3) {
-        addNotification({
-          userId: 'admin',
-          title: 'Alerte notation',
-          message: `${artisan.firstName} ${artisan.lastName} a une note de ${newRating.toFixed(1)} étoiles`,
-          type: 'error',
-          read: false,
-        });
-      }
+  const rateArtisan = async (requestId: string, rating: number, review: string) => {
+    try {
+      await api.requests.confirm(requestId, 0, rating, review);
+      updateRequest(requestId, { rating, review });
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Erreur de notation';
+      setError(errorMessage);
+      throw err;
     }
   };
 
@@ -367,68 +304,75 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }));
   };
 
-  const requestWithdrawal = (artisanId: string, amount: number) => {
-    const artisan = state.artisans.find(a => a.id === artisanId);
-    if (!artisan || artisan.balance < amount) return;
-
-    const withdrawal = {
-      id: `wr_${Date.now()}`,
-      artisanId,
-      artisanName: `${artisan.firstName} ${artisan.lastName}`,
-      amount,
-      requestedAt: new Date(),
-      status: 'pending' as const,
-    };
-
-    updateArtisan(artisanId, {
-      withdrawalRequests: [...artisan.withdrawalRequests, withdrawal],
-    });
-
-    addNotification({
-      userId: 'admin',
-      title: 'Demande de retrait',
-      message: `${artisan.firstName} ${artisan.lastName} demande un retrait de ${amount.toLocaleString()} FCFA`,
-      type: 'warning',
-      read: false,
-    });
+  const requestWithdrawal = async (_artisanId: string, _amount: number) => {
+    try {
+      await api.artisan.withdraw();
+      // Optionally update UI after successful withdrawal
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Erreur de demande de retrait';
+      setError(errorMessage);
+      throw err;
+    }
   };
 
-  const depositBalance = (artisanId: string, amount: number) => {
-    const artisan = state.artisans.find(a => a.id === artisanId);
-    if (!artisan) return;
-
-    updateArtisan(artisanId, { balance: artisan.balance + amount });
+  const depositBalance = async (_artisanId: string, amount: number) => {
+    try {
+      await api.artisan.deposit(amount);
+      // Optionally update UI after successful deposit
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Erreur de dépôt';
+      setError(errorMessage);
+      throw err;
+    }
   };
 
-  const validateArtisan = (artisanId: string, validated: boolean) => {
-    updateArtisan(artisanId, { isValidated: validated });
+  const validateArtisan = async (artisanId: string, validated: boolean) => {
+    try {
+      await api.admin.validateArtisan(artisanId);
+      updateArtisan(artisanId, { isValidated: validated });
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Erreur de validation';
+      setError(errorMessage);
+      throw err;
+    }
   };
 
-  const blockArtisan = (artisanId: string, blocked: boolean) => {
-    updateArtisan(artisanId, { isActive: !blocked });
+  const blockArtisan = async (artisanId: string, blocked: boolean) => {
+    try {
+      await api.admin.blockArtisan(artisanId, blocked);
+      updateArtisan(artisanId, { isActive: !blocked });
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Erreur de blocage';
+      setError(errorMessage);
+      throw err;
+    }
   };
+
+  const contextValue = useMemo(() => ({
+    ...state,
+    login,
+    logout,
+    register,
+    updateArtisan,
+    updateClient,
+    createRequest,
+    updateRequest,
+    acceptRequest,
+    completeRequest,
+    cancelRequest,
+    rateArtisan,
+    addNotification,
+    markNotificationRead,
+    requestWithdrawal,
+    depositBalance,
+    validateArtisan,
+    blockArtisan,
+    loading,
+    error,
+  }), [state, loading, error]);
 
   return (
-    <AppContext.Provider value={{
-      ...state,
-      login,
-      logout,
-      register,
-      updateArtisan,
-      updateClient,
-      createRequest,
-      updateRequest,
-      acceptRequest,
-      completeRequest,
-      cancelRequest,
-      rateArtisan,
-      addNotification,
-      markNotificationRead,
-      requestWithdrawal,
-      depositBalance,
-      validateArtisan,
-      blockArtisan,
-    }}>
+    <AppContext.Provider value={contextValue}>
       {children}
     </AppContext.Provider>
   );
