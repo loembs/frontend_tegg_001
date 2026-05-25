@@ -1526,3 +1526,6 @@ export default {
   admin: adminService,
   healthCheck,
 };
+
+// Export supabase client
+export { supabase };
