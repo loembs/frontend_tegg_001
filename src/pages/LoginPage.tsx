@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Zap, Snowflake, Wrench, Hammer, Paintbrush, User, Lock, ChevronLeft, Phone, UserPlus } from 'lucide-react';
-import { useApp } from '../context/AppContext';
+import { useSupabaseApp as useApp } from '../context/SupabaseAppContext';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { UserRole, ServiceCategory } from '../types';
@@ -305,9 +305,9 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onBack, initialRo
             )}
 
             <Input
-              label="Numéro de téléphone"
-              type="tel"
-              placeholder="+221 77 123 45 67"
+              label="Email ou numéro de téléphone"
+              type="text"
+              placeholder="votre@email.com ou +221 77 123 45 67"
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
               icon={<Phone className="w-4 h-4" />}

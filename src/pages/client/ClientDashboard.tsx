@@ -5,7 +5,7 @@ import {
   ChevronRight, AlertCircle, Clock, CheckCircle, XCircle, 
   MapPin, Star, Phone, MessageCircle, X, Search
 } from 'lucide-react';
-import { useApp } from '../../context/AppContext';
+import { useSupabaseApp as useApp } from '../../context/SupabaseAppContext';
 import { Button } from '../../components/ui/Button';
 import { TextArea, Select } from '../../components/ui/Input';
 import { Card, CardContent } from '../../components/ui/Card';

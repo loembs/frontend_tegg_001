@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { SupabaseSupabaseAppProvider, useSupabaseApp } from './context/SupabaseAppContext';
+import { SupabaseAppProvider, useSupabaseApp } from './context/SupabaseAppContext';
 import { HomePage } from './pages/HomePage';
 import { LoginPage } from './pages/LoginPage';
 import { ClientDashboard } from './pages/client/ClientDashboard';

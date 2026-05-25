@@ -5,7 +5,7 @@ import {
   MapPin, Star, Filter, CheckCircle, Clock, XCircle, AlertCircle,
   Zap, Snowflake, Hammer, Paintbrush, Menu, X
 } from 'lucide-react';
-import { useApp } from '../../context/AppContext';
+import { useSupabaseApp as useApp } from '../../context/SupabaseAppContext';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Card, CardContent, CardHeader } from '../../components/ui/Card';

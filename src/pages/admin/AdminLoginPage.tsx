@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Shield, Lock, Phone, ArrowRight } from 'lucide-react';
-import { useApp } from '../../context/AppContext';
+import { useSupabaseApp as useApp } from '../../context/SupabaseAppContext';
 import { Button } from '../../components/ui/Button';
 
 interface AdminLoginPageProps {

@@ -106,33 +106,51 @@ export const authService = {
   },
 
   /**
-   * Connexion
+   * Connexion (accepte email ou téléphone)
    */
   async login(phone: string, password: string): Promise<AuthResponse> {
     try {
-      // Trouver l'utilisateur par téléphone
-      const { data: profile, error: profileError } = await supabase
+      // Nettoyer l'input (enlever les espaces)
+      const credential = phone.trim();
+      const isEmail = credential.includes('@');
+
+      // Trouver l'utilisateur par email ou téléphone
+      let query = supabase
         .from('profiles')
-        .select('*')
-        .eq('phone', phone)
-        .single();
+        .select('*');
+
+      if (isEmail) {
+        query = query.ilike('email', credential);
+      } else {
+        query = query.eq('phone', credential);
+      }
+
+      const { data: profile, error: profileError } = await query.single();
 
       if (profileError || !profile) {
-        return { success: false, error: 'Numéro de téléphone ou mot de passe incorrect' };
+        return { success: false, error: isEmail ? 'Email ou mot de passe incorrect' : 'Numéro de téléphone ou mot de passe incorrect' };
       }
 
       if (!profile.is_active) {
         return { success: false, error: 'Ce compte a été désactivé' };
       }
 
-      // Connecter avec l'email
+      // Vérifier que l'email et le mot de passe sont valides
+      if (!profile.email || !password || password.trim() === '') {
+        return { success: false, error: 'Email ou mot de passe manquant' };
+      }
+
+      console.log('Tentative de connexion:', { email: profile.email, hasPassword: !!password });
+
+      // Connecter avec l'email du profil
       const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-        email: profile.email,
-        password,
+        email: profile.email.trim(),
+        password: password.trim(),
       });
 
       if (authError || !authData.user) {
-        return { success: false, error: 'Mot de passe incorrect' };
+        console.error('Erreur de connexion:', authError);
+        return { success: false, error: authError?.message || 'Mot de passe incorrect' };
       }
 
       return {
