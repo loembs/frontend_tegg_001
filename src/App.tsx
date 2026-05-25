@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { AppProvider, useApp } from './context/AppContext';
+import { SupabaseSupabaseAppProvider, useSupabaseApp } from './context/SupabaseAppContext';
 import { HomePage } from './pages/HomePage';
 import { LoginPage } from './pages/LoginPage';
 import { ClientDashboard } from './pages/client/ClientDashboard';
@@ -9,7 +9,7 @@ import { AdminLoginPage } from './pages/admin/AdminLoginPage';
 import { ServiceCategory, UserRole } from './types';
 
 function AppContent() {
-  const { isAuthenticated, userRole } = useApp();
+  const { isAuthenticated, userRole } = useSupabaseApp();
   const [loggedIn, setLoggedIn] = useState(false);
   const [currentPage, setCurrentPage] = useState<'home' | 'login' | 'dashboard' | 'admin-login'>('home');
   const [pendingUserType, setPendingUserType] = useState<UserRole>('client');
@@ -116,8 +116,8 @@ function AppContent() {
 
 export function App() {
   return (
-    <AppProvider>
+    <SupabaseAppProvider>
       <AppContent />
-    </AppProvider>
+    </SupabaseAppProvider>
   );
 }
